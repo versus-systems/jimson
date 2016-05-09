@@ -176,6 +176,7 @@ module Jimson
     end
 
     def dispatch_request(method, params)
+      requested_method = method.to_s
       method_name = method.to_s
       handler = @router.handler_for_method(method_name)
       method_name = @router.strip_method_namespace(method_name)
@@ -187,7 +188,7 @@ module Jimson
       end
 
       @middlewares.each do |middleware|
-        params = middleware.process(method_name, params)
+        params = middleware.process(requested_method, params)
       end
 
       if params.nil?
