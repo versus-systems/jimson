@@ -1,18 +1,20 @@
 module Jimson
   class Server
     class Error < StandardError
-      attr_accessor :code, :message
+      attr_accessor :code, :message, :data
 
-      def initialize(code, message)
+      def initialize(code, message, data = {})
         @code = code
         @message = message
+        @data = data
         super(message)
       end
 
       def to_h
         {
           'code'    => @code,
-          'message' => @message
+          'message' => @message,
+          'data'    => @data
         }
       end
 
