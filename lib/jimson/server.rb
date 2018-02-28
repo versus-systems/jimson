@@ -4,11 +4,12 @@ require 'rack/response'
 require 'multi_json'
 require 'jimson/handler'
 require 'jimson/router'
+require 'jimson/middleware'
 require 'jimson/server/error'
 
 module Jimson
   class Server
-    
+
     class System
       extend Handler
 
@@ -20,7 +21,7 @@ module Jimson
         @router.jimson_methods
       end
 
-      def isAlive 
+      def isAlive
         true
       end
     end
@@ -62,7 +63,8 @@ module Jimson
 
       @host = opts.delete(:host) || '0.0.0.0'
       @port = opts.delete(:port) || 8999
-      @show_errors = opts.delete(:show_errors) || false 
+      @show_errors = opts.delete(:show_errors) || false
+      @middlewares = Array(opts.delete(:middlewares))
       @opts = opts
     end
 
@@ -131,11 +133,11 @@ module Jimson
       required_keys = %w(jsonrpc method)
       required_types = {
                          'jsonrpc' => [String],
-                         'method'  => [String], 
+                         'method'  => [String],
                          'params'  => [Hash, Array],
                          'id'      => [String, Fixnum, Bignum, NilClass]
                        }
-      
+
       return false if !request.is_a?(Hash)
 
       required_keys.each do |key|
@@ -147,7 +149,7 @@ module Jimson
       end
 
       return false if request['jsonrpc'] != JSON_RPC_VERSION
-      
+
       true
     end
 
@@ -159,11 +161,11 @@ module Jimson
       response = success_response(request, result)
 
       # A Notification is a Request object without an "id" member.
-      # The Server MUST NOT reply to a Notification, including those 
+      # The Server MUST NOT reply to a Notification, including those
       # that are within a batch request.
       response = nil if !request.has_key?('id')
 
-      return response 
+      return response
 
       rescue Server::Error => e
         raise e
@@ -174,6 +176,7 @@ module Jimson
     end
 
     def dispatch_request(method, params)
+      requested_method = method.to_s
       method_name = method.to_s
       handler = @router.handler_for_method(method_name)
       method_name = @router.strip_method_namespace(method_name)
@@ -182,6 +185,10 @@ module Jimson
       || !handler.class.jimson_exposed_methods.include?(method_name) \
       || !handler.respond_to?(method_name)
         raise Server::Error::MethodNotFound.new(method)
+      end
+
+      @middlewares.each do |middleware|
+        params = middleware.process(requested_method, params)
       end
 
       if params.nil?
@@ -199,7 +206,7 @@ module Jimson
                'error'   => error.to_h,
              }
       if !!request && request.has_key?('id')
-        resp['id'] = request['id'] 
+        resp['id'] = request['id']
       else
         resp['id'] = nil
       end
@@ -210,15 +217,15 @@ module Jimson
     def success_response(request, result)
       {
         'jsonrpc' => JSON_RPC_VERSION,
-        'result'  => result,  
+        'result'  => result,
         'id'      => request['id']
       }
     end
 
     def parse_request(post)
       data = MultiJson.decode(post)
-      rescue 
-        raise Server::Error::ParseError.new 
+      rescue
+        raise Server::Error::ParseError.new
     end
 
   end
